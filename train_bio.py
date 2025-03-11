@@ -202,7 +202,10 @@ def main():
                         help="The initial learning rate for Adam.")
     parser.add_argument("--max_height", type=int, default=42,
                         help="log.")
-    
+    # Modify here
+    parser.add_argument("--train_from_saved_model", type=str, default='',
+                        help="train from a saved model.")
+    # Modify here
     args = parser.parse_args()
     # wandb.init(project="CDR")
     print(args)
@@ -239,6 +242,9 @@ def main():
 
     set_seed(args)
     model = DocREModel(config, args, model, num_labels=args.num_labels)
+    if args.train_from_saved_model != '':
+        model.load_state_dict(torch.load(args.train_from_saved_model)["checkpoint"])
+        print("load saved model from {}.".format(args.train_from_saved_model))
     model.to(0)
 
     if args.load_path == "":
