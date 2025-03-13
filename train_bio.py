@@ -14,9 +14,12 @@ from datetime import datetime
 
 
 def train(args, model, train_features, dev_features, test_features, checkpoint=None):
-    def logging(s, print_=True, log_=True, log_dir=None):
-        if log_dir is None:
+    def logging(s, print_=True, log_=True, flag=False):
+        log_dir = None
+        if flag is False:
             log_dir = args.log_dir
+        else:
+            log_dir = args.log_epoch_dir
         if print_:
             print(s)
         if log_:
@@ -107,7 +110,7 @@ def train(args, model, train_features, dev_features, test_features, checkpoint=N
             if args.log_epoch_dir != '':
                 logging(
                     '| epoch {:2d}| lr {} | best_f1{}'.format(
-                        epoch, scheduler.get_lr(), best_score), args.log_epoch_dir)
+                        epoch, scheduler.get_lr(), best_score), flag=True)
             if args.only_one_epoch == 'yes':
                 break
 
