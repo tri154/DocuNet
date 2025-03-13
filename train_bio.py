@@ -28,20 +28,17 @@ def train(args, model, train_features, dev_features, test_features, checkpoint=N
     def finetune(features, optimizer, num_epoch, num_steps, checkpoint=None):
         best_score = -1
         train_dataloader = DataLoader(features, batch_size=args.train_batch_size, shuffle=True, collate_fn=collate_fn, drop_last=True)
-        scheduler = None
-        train_iterator = None
+        train_iterator = range(int(num_epoch))
+        total_steps = int(len(train_dataloader) * num_epoch // args.gradient_accumulation_steps)
+        warmup_steps = int(total_steps * args.warmup_ratio)
+        print("Total steps: {}".format(total_steps))
+        print("Warmup steps: {}".format(warmup_steps))
+        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps)
         if checkpoint is not None:
             train_iterator = range(checkpoint['epoch'] + 1, int(num_epoch))
             best_score = checkpoint['best_f1']
-            scheduler = checkpoint['scheduler_state_dict']
-        else:
-        #TODO:
-            train_iterator = range(int(num_epoch))
-            total_steps = int(len(train_dataloader) * num_epoch // args.gradient_accumulation_steps)
-            warmup_steps = int(total_steps * args.warmup_ratio)
-            scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps)
-            print("Total steps: {}".format(total_steps))
-            print("Warmup steps: {}".format(warmup_steps))
+            scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+        
 
         log_step = 50
         total_loss = 0
@@ -126,13 +123,12 @@ def train(args, model, train_features, dev_features, test_features, checkpoint=N
 
 
     #TODO: 
-    optimizer = None
+    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     num_steps = 0
     if checkpoint is not None:
-        optimizer = checkpoint['optimizer_state_dict']
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         num_steps = checkpoint['num_steps']
-    else:
-        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+        
     set_seed(args)
     model.zero_grad()
     finetune(train_features, optimizer, args.num_train_epochs, num_steps, checkpoint=checkpoint)
