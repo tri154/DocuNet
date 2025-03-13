@@ -38,6 +38,7 @@ def train(args, model, train_features, dev_features, test_features, checkpoint=N
             train_iterator = range(checkpoint['epoch'] + 1, int(num_epoch))
             best_score = checkpoint['best_f1']
             scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+            print("Load scheduler succesfully")
         
 
         log_step = 50
@@ -128,6 +129,7 @@ def train(args, model, train_features, dev_features, test_features, checkpoint=N
     if checkpoint is not None:
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         num_steps = checkpoint['num_steps']
+        print("Load optimizer succesfully")
         
     set_seed(args)
     model.zero_grad()
