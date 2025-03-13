@@ -1,6 +1,6 @@
+import numpy as np
 import argparse
 import os
-import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from transformers import AutoConfig, AutoModel, AutoTokenizer
@@ -13,23 +13,32 @@ from datetime import datetime
 
 
 
-def train(args, model, train_features, dev_features, test_features):
-    def logging(s, print_=True, log_=True):
+def train(args, model, train_features, dev_features, test_features, checkpoint=None):
+    def logging(s, print_=True, log_=True, log_dir=None):
+        if log_dir is None:
+            log_dir = args.log_dir
         if print_:
             print(s)
         if log_:
-            with open(args.log_dir, 'a+') as f_log:
+            with open(log_dir, 'a+') as f_log:
                 f_log.write(s + '\n')
-
-    def finetune(features, optimizer, num_epoch, num_steps):
+    def finetune(features, optimizer, num_epoch, num_steps, checkpoint=None):
         best_score = -1
         train_dataloader = DataLoader(features, batch_size=args.train_batch_size, shuffle=True, collate_fn=collate_fn, drop_last=True)
-        train_iterator = range(int(num_epoch))
-        total_steps = int(len(train_dataloader) * num_epoch // args.gradient_accumulation_steps)
-        warmup_steps = int(total_steps * args.warmup_ratio)
-        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps)
-        print("Total steps: {}".format(total_steps))
-        print("Warmup steps: {}".format(warmup_steps))
+        scheduler = None
+        train_iterator = None
+        if checkpoint is not None:
+            train_iterator = range(checkpoint['epoch'] + 1, int(num_epoch))
+            best_score = checkpoint['best_f1']
+            scheduler = checkpoint['scheduler_state_dict']
+        else:
+        #TODO:
+            train_iterator = range(int(num_epoch))
+            total_steps = int(len(train_dataloader) * num_epoch // args.gradient_accumulation_steps)
+            warmup_steps = int(total_steps * args.warmup_ratio)
+            scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps)
+            print("Total steps: {}".format(total_steps))
+            print("Warmup steps: {}".format(warmup_steps))
 
         log_step = 50
         total_loss = 0
@@ -86,6 +95,21 @@ def train(args, model, train_features, dev_features, test_features):
                                 'best_f1': best_score
                             }, args.save_path)
 
+            if args.save_path_epoch != '':
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scheduler_state_dict': scheduler.state_dict(),
+                    'num_steps': num_steps,
+                    'best_f1': best_score 
+                }, args.save_path_epoch + "/train_epoch_{}_lr_{}.pt".format(epoch, scheduler.get_lr()))
+            if args.log_epoch_dir != '':
+                logging(
+                    '| epoch {:2d}| lr {} | best_f1{}'.format(
+                        epoch, scheduler.get_lr(), best_score), args.log_epoch_dir)
+                
+
         return num_steps
 
     extract_layer = ["extractor", "bilinear"]
@@ -97,11 +121,17 @@ def train(args, model, train_features, dev_features, test_features):
     ]
 
 
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    #TODO: 
+    optimizer = None
     num_steps = 0
+    if checkpoint is not None:
+        optimizer = checkpoint['optimizer_state_dict']
+        num_steps = checkpoint['num_steps']
+    else:
+        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     set_seed(args)
     model.zero_grad()
-    finetune(train_features, optimizer, args.num_train_epochs, num_steps)
+    finetune(train_features, optimizer, args.num_train_epochs, num_steps, checkpoint=checkpoint)
 
 
 def evaluate(args, model, features, tag="dev"):
@@ -205,6 +235,8 @@ def main():
     # Modify here
     parser.add_argument("--train_from_saved_model", type=str, default='',
                         help="train from a saved model.")
+    parser.add_argument("--save_path_epoch", type=str, default='', help="save path each epoch.")
+    parser.add_argument("--log_epoch_dir", type=str, default='', help="log dir each epoch.")
     # Modify here
     args = parser.parse_args()
     # wandb.init(project="CDR")
@@ -242,13 +274,16 @@ def main():
 
     set_seed(args)
     model = DocREModel(config, args, model, num_labels=args.num_labels)
+    #TODO:
+    checkpoint = None
     if args.train_from_saved_model != '':
-        model.load_state_dict(torch.load(args.train_from_saved_model)["checkpoint"])
+        checkpoint = torch.load(args.train_from_saved_model)
+        model.load_state_dict(checkpoint["model_state_dict"])
         print("load saved model from {}.".format(args.train_from_saved_model))
     model.to(0)
 
     if args.load_path == "":
-        train(args, model, train_features, dev_features, test_features)
+        train(args, model, train_features, dev_features, test_features, checkpoint=checkpoint)
     else:
         # model = amp.initialize(model, opt_level="O1", verbosity=0)
         model.load_state_dict(torch.load(args.load_path))
