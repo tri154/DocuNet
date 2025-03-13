@@ -108,7 +108,8 @@ def train(args, model, train_features, dev_features, test_features, checkpoint=N
                 logging(
                     '| epoch {:2d}| lr {} | best_f1{}'.format(
                         epoch, scheduler.get_lr(), best_score), args.log_epoch_dir)
-                
+            if args.only_one_epoch == 'yes':
+                break
 
         return num_steps
 
@@ -237,6 +238,7 @@ def main():
                         help="train from a saved model.")
     parser.add_argument("--save_path_epoch", type=str, default='', help="save path each epoch.")
     parser.add_argument("--log_epoch_dir", type=str, default='', help="log dir each epoch.")
+    parser.add_argument("--only_one_epoch", type=str, default='no', help="perform one epoch")
     # Modify here
     args = parser.parse_args()
     # wandb.init(project="CDR")
