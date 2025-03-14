@@ -40,7 +40,6 @@ def train(args, model, train_features, dev_features, test_features, checkpoint=N
             scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
             print("Load scheduler succesfully")
             print(f"Current lr: {scheduler.get_lr()}")
-            input("I'm waiting")
         
 
         log_step = 50
